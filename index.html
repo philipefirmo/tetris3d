@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tetris 3D Mobile</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <div id="score">Pontuação: <span id="scoreValue">0</span></div>
+            <div id="level">Nível: <span id="levelValue">1</span></div>
+            <div id="lines">Linhas: <span id="linesValue">0</span></div>
+        </div>
+        
+        <div id="gameArea">
+            <canvas id="gameCanvas"></canvas>
+        </div>
+        
+        <div id="controls">
+            <div class="instructions">
+                <p>🎮 <strong>Controles:</strong></p>
+                <p>• Arraste longo para rotacionar a câmera</p>
+                <p>• Swipe rápido ←/→ para rotacionar plano</p>
+                <p>• Swipe rápido ↑/↓ para inclinar plano</p>
+                <p>• Peças caem automaticamente</p>
+                <p>• Botão ↻ para rotacionar peça atual</p>
+            </div>
+            <div class="control-row">
+                <button id="rotateBtn" class="control-btn">↻</button>
+                <button id="dropBtn" class="control-btn">⬇</button>
+            </div>
+        </div>
+        
+        <div id="gameOver" class="hidden">
+            <h2>Game Over!</h2>
+            <p>Pontuação Final: <span id="finalScore">0</span></p>
+            <button id="restartBtn">Jogar Novamente</button>
+        </div>
+        
+        <div id="pauseMenu" class="hidden">
+            <h2>Pausado</h2>
+            <button id="resumeBtn">Continuar</button>
+            <button id="newGameBtn">Novo Jogo</button>
+        </div>
+    </div>
+    
+    <script src="tetris3d.js"></script>
+</body>
+</html>

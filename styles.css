@@ -1,0 +1,244 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    overflow: hidden;
+    height: 100vh;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#gameContainer {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    position: relative;
+}
+
+#ui {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    font-size: 14px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+#gameArea {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+#gameCanvas {
+    max-width: 100%;
+    max-height: 100%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+#controls {
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.instructions {
+    text-align: center;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.instructions p {
+    margin: 3px 0;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.instructions strong {
+    color: #4299e1;
+}
+
+.control-row {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.control-btn {
+    width: 60px;
+    height: 60px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #4a5568, #2d3748);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+.control-btn:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(145deg, #2d3748, #4a5568);
+}
+
+.control-btn:hover {
+    background: linear-gradient(145deg, #5a6578, #3d4758);
+}
+
+#rotateBtn {
+    background: linear-gradient(145deg, #e53e3e, #c53030);
+}
+
+#rotateBtn:active {
+    background: linear-gradient(145deg, #c53030, #e53e3e);
+}
+
+#dropBtn {
+    background: linear-gradient(145deg, #38a169, #2f855a);
+}
+
+#dropBtn:active {
+    background: linear-gradient(145deg, #2f855a, #38a169);
+}
+
+#gameOver, #pauseMenu {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    padding: 30px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+}
+
+#gameOver h2, #pauseMenu h2 {
+    margin-bottom: 20px;
+    font-size: 24px;
+    color: #ff6b6b;
+}
+
+#gameOver p {
+    margin-bottom: 20px;
+    font-size: 18px;
+}
+
+#restartBtn, #resumeBtn, #newGameBtn {
+    padding: 12px 24px;
+    margin: 5px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(145deg, #4299e1, #3182ce);
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#restartBtn:hover, #resumeBtn:hover, #newGameBtn:hover {
+    background: linear-gradient(145deg, #3182ce, #2c5aa0);
+    transform: translateY(-2px);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Responsividade para diferentes tamanhos de tela */
+@media (max-width: 480px) {
+    #ui {
+        font-size: 12px;
+        padding: 8px;
+    }
+    
+    .control-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+    
+    #controls {
+        padding: 15px;
+    }
+    
+    .control-row {
+        gap: 15px;
+    }
+}
+
+@media (orientation: landscape) {
+    #gameContainer {
+        flex-direction: row;
+    }
+    
+    #ui {
+        writing-mode: vertical-rl;
+        width: 120px;
+        flex-direction: column;
+        justify-content: space-around;
+    }
+    
+    #controls {
+        width: 200px;
+        justify-content: center;
+    }
+    
+    #gameArea {
+        flex: 1;
+    }
+}
+
+/* Animações */
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+#gameOver, #pauseMenu {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Efeitos visuais para feedback tátil */
+.control-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.3s, height 0.3s;
+}
+
+.control-btn:active::before {
+    width: 100%;
+    height: 100%;
+}
