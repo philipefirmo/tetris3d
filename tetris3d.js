@@ -83,17 +83,25 @@ class Tetris3D {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x1a1a2e);
         
-        // Camera
+        // Camera - Fixed side view position
         const aspect = container.clientWidth / container.clientHeight;
         this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-        this.updateCameraPosition();
-        this.camera.lookAt(this.boardWidth/2, this.boardHeight/2, this.boardDepth/2);
+        
+        // Set camera position at 45 degrees laterally
+        const distance = 20;
+        const angle = Math.PI / 4; // 45 degrees
+        this.cameraAngle = angle;
+        this.cameraDistance = distance;
+        this.camera.position.set(
+            Math.cos(this.cameraAngle) * this.cameraDistance,
+            this.boardHeight/2 + 5,
+            Math.sin(this.cameraAngle) * this.cameraDistance
+        );
+        this.camera.lookAt(0, this.boardHeight/2, 0);
         
         // Renderer
         this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
         this.renderer.setSize(container.clientWidth, container.clientHeight);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         
         // Lighting
         const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -101,9 +109,6 @@ class Tetris3D {
         
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(10, 20, 10);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
         this.scene.add(directionalLight);
         
         // Handle resize
@@ -615,15 +620,21 @@ class Tetris3D {
             
             this.hasMoved = true;
             
-            // Only rotate camera if dragging
+            // Move camera in circle around the board center if dragging
             if (this.isDragging) {
-                this.cameraRotation.y += deltaX * 0.01;
-                this.cameraRotation.x -= deltaY * 0.01;
+                // Rotate camera around the board center
+                const rotationSpeed = 0.01;
+                this.cameraAngle += deltaX * rotationSpeed;
                 
-                // Limit vertical rotation
-                this.cameraRotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, this.cameraRotation.x));
+                // Update camera position in circular motion
+                this.camera.position.set(
+                    Math.cos(this.cameraAngle) * this.cameraDistance,
+                    this.boardHeight/2 + 5,
+                    Math.sin(this.cameraAngle) * this.cameraDistance
+                );
                 
-                this.updateCameraPosition();
+                // Keep camera looking at the center of the board
+                this.camera.lookAt(0, this.boardHeight/2, 0);
             }
             
             this.lastTouch = { x: touch.clientX, y: touch.clientY };
@@ -638,24 +649,23 @@ class Tetris3D {
             const touchDuration = Date.now() - this.touchStartTime;
             
             // Only process swipes if it wasn't a camera drag
-             if (!this.isDragging && touchDuration < 500) {
-                 // Detect swipes (only for quick, short movements)
+             if (!this.isDragging) {
+                 // Detect swipes
                  if (Math.abs(deltaX) > this.swipeThreshold || Math.abs(deltaY) > this.swipeThreshold) {
-                     if (this.gameRunning && !this.gamePaused) {
+                     if (this.gameRunning && !this.gamePaused && this.currentPiece) {
                          if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                              // Horizontal swipe - rotate board around Y axis
-                              const rotationSpeed = 0.2; // Increased rotation speed
-                              const newRotationY = this.boardRotation.y + (deltaX > 0 ? rotationSpeed : -rotationSpeed);
-                              // Limit rotation to prevent excessive tilting
-                              this.boardRotation.y = Math.max(-Math.PI/4, Math.min(Math.PI/4, newRotationY));
-                              this.updateBoardRotation();
+                              // Horizontal swipe - move piece left/right
+                              const direction = deltaX > 0 ? 1 : -1;
+                              this.movePiece(this.currentPiece, direction, 0, 0);
                           } else {
-                              // Vertical swipe - rotate board around X axis
-                              const rotationSpeed = 0.2; // Increased rotation speed
-                              const newRotationX = this.boardRotation.x + (deltaY > 0 ? -rotationSpeed : rotationSpeed);
-                              // Limit rotation to prevent excessive tilting
-                              this.boardRotation.x = Math.max(-Math.PI/4, Math.min(Math.PI/4, newRotationX));
-                              this.updateBoardRotation();
+                              // Vertical swipe - move piece forward/back or drop
+                              if (deltaY > 0) {
+                                  // Swipe down - hard drop
+                                  this.hardDrop();
+                              } else {
+                                  // Swipe up - move piece forward/back
+                                  this.movePiece(this.currentPiece, 0, 0, -1);
+                              }
                           }
                      }
                  } else if (!this.hasMoved && touchDuration < 200) {
@@ -680,13 +690,20 @@ class Tetris3D {
             if (!this.isDragging) return;
             
             const deltaX = e.clientX - this.lastTouch.x;
-            const deltaY = e.clientY - this.lastTouch.y;
             
-            this.cameraRotation.y += deltaX * 0.01;
-            this.cameraRotation.x -= deltaY * 0.01;
-            this.cameraRotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, this.cameraRotation.x));
+            // Rotate camera around the board center
+            const rotationSpeed = 0.01;
+            this.cameraAngle += deltaX * rotationSpeed;
             
-            this.updateCameraPosition();
+            // Update camera position in circular motion
+            this.camera.position.set(
+                Math.cos(this.cameraAngle) * this.cameraDistance,
+                this.boardHeight/2 + 5,
+                Math.sin(this.cameraAngle) * this.cameraDistance
+            );
+            
+            // Keep camera looking at the center of the board
+            this.camera.lookAt(0, this.boardHeight/2, 0);
             this.lastTouch = { x: e.clientX, y: e.clientY };
         });
         
