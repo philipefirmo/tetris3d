@@ -6,6 +6,7 @@ class Tetris3D {
         this.gameBoard = [];
         this.currentPiece = null;
         this.nextPiece = null;
+        this.ghostPiece = null; // Shadow piece showing where current piece will land
         this.score = 0;
         this.level = 1;
         this.lines = 0;
@@ -144,39 +145,183 @@ class Tetris3D {
             transparent: true, 
             opacity: 0.3 
         });
+    }
+    
+    rotatePieceDirectional(touchInfo) {
+        if (!this.currentPiece) return;
         
-        // Bottom
-        const bottomGeometry = new THREE.PlaneGeometry(this.boardWidth, this.boardDepth);
-        const bottom = new THREE.Mesh(bottomGeometry, material);
-        bottom.rotation.x = -Math.PI / 2;
-        bottom.position.set(this.boardWidth/2 - 0.5, -0.5, this.boardDepth/2 - 0.5);
-        this.boardGroup.add(bottom);
+        const centerX = touchInfo.canvasWidth / 2;
+        const centerY = touchInfo.canvasHeight / 2;
+        const touchX = touchInfo.x;
+        const touchY = touchInfo.y;
         
-        // Walls
-        const wallMaterial = new THREE.MeshLambertMaterial({ 
-            color: 0x222222, 
-            transparent: true, 
-            opacity: 0.2 
+        // Calculate relative position from center
+        const deltaX = touchX - centerX;
+        const deltaY = touchY - centerY;
+        const absX = Math.abs(deltaX);
+        const absY = Math.abs(deltaY);
+        
+        // Get current camera and board orientation to determine visible face
+        const cameraAngleY = this.cameraRotation.y;
+        const boardAngleY = this.boardRotation.y;
+        const totalAngleY = cameraAngleY + boardAngleY;
+        
+        // Normalize angle to 0-2π range
+        const normalizedAngle = ((totalAngleY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        
+        let rotationAxis;
+        
+        // Determine rotation axis based on touch direction and current view angle
+        if (absY > absX) {
+            // Vertical touch
+            if (deltaY < 0) {
+                // Touch up - rotate "away" from viewer
+                rotationAxis = this.getAxisForDirection('up', normalizedAngle);
+            } else {
+                // Touch down - rotate "toward" viewer  
+                rotationAxis = this.getAxisForDirection('down', normalizedAngle);
+            }
+        } else {
+            // Horizontal touch
+            if (deltaX < 0) {
+                // Touch left - rotate left relative to current view
+                rotationAxis = this.getAxisForDirection('left', normalizedAngle);
+            } else {
+                // Touch right - rotate right relative to current view
+                rotationAxis = this.getAxisForDirection('right', normalizedAngle);
+            }
+        }
+        
+        // Apply rotation
+        if (!this.rotatePiece(this.currentPiece, rotationAxis)) {
+            // Fallback to Y-axis rotation if the intended rotation fails
+            this.rotatePiece(this.currentPiece, 'y');
+        }
+    }
+    
+    getAxisForDirection(direction, viewAngle) {
+        // Determine which 3D axis corresponds to the touch direction based on current view
+        const sector = Math.floor((viewAngle + Math.PI/4) / (Math.PI/2)) % 4;
+        
+        switch(direction) {
+            case 'up':
+            case 'down':
+                // Vertical touches always rotate around X-axis (pitch)
+                return 'x';
+                
+            case 'left':
+            case 'right':
+                // Horizontal touches rotate around different axes based on view angle
+                switch(sector) {
+                    case 0: // Front view
+                    case 2: // Back view
+                        return 'z'; // Roll rotation
+                    case 1: // Right side view
+                    case 3: // Left side view
+                        return 'y'; // Yaw rotation
+                    default:
+                        return 'z';
+                }
+                
+            default:
+                return 'y';
+        }
+    }
+    
+    createBoardBoundaries() {
+        // Create a more solid and attractive base
+        const baseThickness = 0.5;
+        const baseGeometry = new THREE.BoxGeometry(this.boardWidth + 1, baseThickness, this.boardDepth + 1);
+        const baseMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x2c3e50,
+            shininess: 30,
+            transparent: false
         });
         
-        // Back wall
-        const backWallGeometry = new THREE.PlaneGeometry(this.boardWidth, this.boardHeight);
-        const backWall = new THREE.Mesh(backWallGeometry, wallMaterial);
-        backWall.position.set(this.boardWidth/2 - 0.5, this.boardHeight/2 - 0.5, -0.5);
-        this.boardGroup.add(backWall);
+        const base = new THREE.Mesh(baseGeometry, baseMaterial);
+        base.position.set(this.boardWidth/2 - 0.5, -baseThickness/2 - 0.5, this.boardDepth/2 - 0.5);
+        base.receiveShadow = true;
+        this.boardGroup.add(base);
         
-        // Side walls
-        const sideWallGeometry = new THREE.PlaneGeometry(this.boardDepth, this.boardHeight);
+        // Create grid lines on the base for better visual reference
+        const gridMaterial = new THREE.LineBasicMaterial({ color: 0x34495e, linewidth: 1 });
         
-        const leftWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
-        leftWall.rotation.y = Math.PI / 2;
-        leftWall.position.set(-0.5, this.boardHeight/2 - 0.5, this.boardDepth/2 - 0.5);
-        this.boardGroup.add(leftWall);
+        // Vertical grid lines
+        for (let x = 0; x <= this.boardWidth; x++) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(x - 0.5, -0.4, -0.5),
+                new THREE.Vector3(x - 0.5, -0.4, this.boardDepth - 0.5)
+            ]);
+            const line = new THREE.Line(geometry, gridMaterial);
+            this.boardGroup.add(line);
+        }
         
-        const rightWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
-        rightWall.rotation.y = -Math.PI / 2;
-        rightWall.position.set(this.boardWidth - 0.5, this.boardHeight/2 - 0.5, this.boardDepth/2 - 0.5);
-        this.boardGroup.add(rightWall);
+        // Horizontal grid lines
+        for (let z = 0; z <= this.boardDepth; z++) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-0.5, -0.4, z - 0.5),
+                new THREE.Vector3(this.boardWidth - 0.5, -0.4, z - 0.5)
+            ]);
+            const line = new THREE.Line(geometry, gridMaterial);
+            this.boardGroup.add(line);
+        }
+        
+        // Create elegant side borders
+        const borderHeight = 0.3;
+        const borderMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x34495e,
+            shininess: 50,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        // Front border
+        const frontBorder = new THREE.BoxGeometry(this.boardWidth + 1, borderHeight, 0.1);
+        const frontBorderMesh = new THREE.Mesh(frontBorder, borderMaterial);
+        frontBorderMesh.position.set(this.boardWidth/2 - 0.5, borderHeight/2 - 0.5, this.boardDepth - 0.45);
+        frontBorderMesh.castShadow = true;
+        this.boardGroup.add(frontBorderMesh);
+        
+        // Back border
+        const backBorderMesh = new THREE.Mesh(frontBorder, borderMaterial);
+        backBorderMesh.position.set(this.boardWidth/2 - 0.5, borderHeight/2 - 0.5, -0.55);
+        backBorderMesh.castShadow = true;
+        this.boardGroup.add(backBorderMesh);
+        
+        // Left border
+        const sideBorder = new THREE.BoxGeometry(0.1, borderHeight, this.boardDepth + 1);
+        const leftBorderMesh = new THREE.Mesh(sideBorder, borderMaterial);
+        leftBorderMesh.position.set(-0.55, borderHeight/2 - 0.5, this.boardDepth/2 - 0.5);
+        leftBorderMesh.castShadow = true;
+        this.boardGroup.add(leftBorderMesh);
+        
+        // Right border
+        const rightBorderMesh = new THREE.Mesh(sideBorder, borderMaterial);
+        rightBorderMesh.position.set(this.boardWidth - 0.45, borderHeight/2 - 0.5, this.boardDepth/2 - 0.5);
+        rightBorderMesh.castShadow = true;
+        this.boardGroup.add(rightBorderMesh);
+        
+        // Add corner decorations
+        const cornerSize = 0.2;
+        const cornerMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x3498db,
+            shininess: 100
+        });
+        
+        const cornerGeometry = new THREE.SphereGeometry(cornerSize, 8, 8);
+        const corners = [
+            [-0.5, 0, -0.5],
+            [this.boardWidth - 0.5, 0, -0.5],
+            [-0.5, 0, this.boardDepth - 0.5],
+            [this.boardWidth - 0.5, 0, this.boardDepth - 0.5]
+        ];
+        
+        corners.forEach(pos => {
+            const corner = new THREE.Mesh(cornerGeometry, cornerMaterial);
+            corner.position.set(pos[0], pos[1], pos[2]);
+            corner.castShadow = true;
+            this.boardGroup.add(corner);
+        });
     }
     
     createBlock(color, x, y, z) {
@@ -266,12 +411,20 @@ class Tetris3D {
             piece.position.y += dy;
             piece.position.z += dz;
             this.updatePiecePosition(piece);
+            
+            // Update ghost piece if this is the current piece
+            if (piece === this.currentPiece) {
+                this.updateGhostPiece();
+            }
+            
             return true;
         }
         return false;
     }
     
     rotatePiece(piece, axis = 'y') {
+        if (!piece) return false;
+        
         let rotatedBlocks;
         
         switch(axis) {
@@ -310,6 +463,12 @@ class Tetris3D {
         
         if (this.canMovePiece(piece, 0, 0, 0)) {
             this.updatePiecePosition(piece);
+            
+            // Update ghost piece if this is the current piece
+            if (piece === this.currentPiece) {
+                this.updateGhostPiece();
+            }
+            
             return true;
         } else {
             piece.blocks = originalBlocks;
@@ -325,6 +484,11 @@ class Tetris3D {
             
             this.gameBoard[x][y][z] = piece.meshes[index];
         });
+        
+        // Remove ghost piece when placing current piece
+        if (piece === this.currentPiece) {
+            this.removeGhostPiece();
+        }
         
         this.checkForCompletedLayers();
     }
@@ -424,6 +588,15 @@ class Tetris3D {
             this.lastTouch = { x: touch.clientX, y: touch.clientY };
             this.swipeStart = { x: touch.clientX, y: touch.clientY };
             this.touchStartTime = Date.now();
+            
+            // Store canvas dimensions for directional piece rotation
+            const rect = canvas.getBoundingClientRect();
+            this.touchStartCanvas = {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top,
+                canvasWidth: rect.width,
+                canvasHeight: rect.height
+            };
         });
         
         canvas.addEventListener('touchmove', (e) => {
@@ -471,15 +644,24 @@ class Tetris3D {
                      if (this.gameRunning && !this.gamePaused) {
                          if (Math.abs(deltaX) > Math.abs(deltaY)) {
                               // Horizontal swipe - rotate board around Y axis
-                              const rotationSpeed = 0.1;
-                              this.boardRotation.y += (deltaX > 0 ? rotationSpeed : -rotationSpeed);
+                              const rotationSpeed = 0.2; // Increased rotation speed
+                              const newRotationY = this.boardRotation.y + (deltaX > 0 ? rotationSpeed : -rotationSpeed);
+                              // Limit rotation to prevent excessive tilting
+                              this.boardRotation.y = Math.max(-Math.PI/4, Math.min(Math.PI/4, newRotationY));
                               this.updateBoardRotation();
                           } else {
                               // Vertical swipe - rotate board around X axis
-                              const rotationSpeed = 0.1;
-                              this.boardRotation.x += (deltaY > 0 ? -rotationSpeed : rotationSpeed);
+                              const rotationSpeed = 0.2; // Increased rotation speed
+                              const newRotationX = this.boardRotation.x + (deltaY > 0 ? -rotationSpeed : rotationSpeed);
+                              // Limit rotation to prevent excessive tilting
+                              this.boardRotation.x = Math.max(-Math.PI/4, Math.min(Math.PI/4, newRotationX));
                               this.updateBoardRotation();
                           }
+                     }
+                 } else if (!this.hasMoved && touchDuration < 200) {
+                     // Quick tap - directional piece rotation
+                     if (this.currentPiece && this.touchStartCanvas && this.gameRunning && !this.gamePaused) {
+                         this.rotatePieceDirectional(this.touchStartCanvas);
                      }
                  }
              }
@@ -628,6 +810,83 @@ class Tetris3D {
         this.spawnNewPiece();
     }
     
+    calculateDropPosition(piece) {
+        if (!piece) return null;
+        
+        // Create a copy of the piece to test drop position
+        const testPiece = {
+            blocks: piece.blocks.map(block => ({...block})),
+            position: {...piece.position}
+        };
+        
+        // Keep moving down until we can't
+        let dropY = testPiece.position.y;
+        while (this.canMovePiece(testPiece, 0, -1, 0)) {
+            dropY--;
+            testPiece.position.y = dropY;
+        }
+        
+        return dropY;
+    }
+    
+    createGhostPiece(piece) {
+        if (!piece) return;
+        
+        const dropY = this.calculateDropPosition(piece);
+        if (dropY === null || dropY === piece.position.y) return;
+        
+        // Remove existing ghost piece
+        this.removeGhostPiece();
+        
+        // Create ghost piece with transparent material
+        const ghostMaterial = new THREE.MeshLambertMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.3,
+            wireframe: false
+        });
+        
+        this.ghostPiece = {
+            blocks: piece.blocks.map(block => ({...block})),
+            meshes: [],
+            position: {
+                x: piece.position.x,
+                y: dropY,
+                z: piece.position.z
+            }
+        };
+        
+        // Create ghost meshes
+        this.ghostPiece.blocks.forEach(block => {
+            const geometry = new THREE.BoxGeometry(this.blockSize, this.blockSize, this.blockSize);
+            const mesh = new THREE.Mesh(geometry, ghostMaterial);
+            
+            mesh.position.set(
+                this.ghostPiece.position.x + block.x,
+                this.ghostPiece.position.y - block.y,
+                this.ghostPiece.position.z + block.z
+            );
+            
+            this.ghostPiece.meshes.push(mesh);
+            this.boardGroup.add(mesh);
+        });
+    }
+    
+    removeGhostPiece() {
+        if (this.ghostPiece) {
+            this.ghostPiece.meshes.forEach(mesh => {
+                this.boardGroup.remove(mesh);
+            });
+            this.ghostPiece = null;
+        }
+    }
+    
+    updateGhostPiece() {
+        if (this.currentPiece) {
+            this.createGhostPiece(this.currentPiece);
+        }
+    }
+    
     spawnNewPiece() {
         const pieceTypeIndex = Math.floor(Math.random() * this.pieceTypes.length);
         
@@ -653,6 +912,9 @@ class Tetris3D {
         this.currentPiece.position.y = this.boardHeight - 2;
         this.currentPiece.position.z = spawnZ;
         this.updatePiecePosition(this.currentPiece);
+        
+        // Create ghost piece to show where it will land
+        this.updateGhostPiece();
         
         // Check game over
         if (!this.canMovePiece(this.currentPiece, 0, 0, 0)) {
@@ -708,51 +970,62 @@ class Tetris3D {
     applyPhysics(deltaTime) {
         if (!this.currentPiece) return;
         
-        // Calculate physics forces based on board rotation
-        const gravityStrength = 0.002; // Adjust this value to control sliding speed
-        const minRotation = 0.1; // Minimum rotation needed to start sliding
-        
-        // Calculate horizontal forces based on board tilt
-        let forceX = 0;
-        let forceZ = 0;
-        
-        // X-axis rotation affects Z movement (forward/backward sliding)
-        if (Math.abs(this.boardRotation.x) > minRotation) {
-            forceZ = Math.sin(this.boardRotation.x) * gravityStrength * deltaTime;
+        // Initialize world position tracking if not exists
+        if (!this.currentPiece.worldPosition) {
+            this.currentPiece.worldPosition = {
+                x: this.currentPiece.position.x,
+                z: this.currentPiece.position.z
+            };
         }
         
-        // Y-axis rotation affects X movement (left/right sliding)
+        // Calculate the "ideal" position where the piece should be in world space
+        // This simulates the piece staying in place while the board moves underneath
+        const gravityStrength = 0.015; // Strength of the sliding effect
+        const minRotation = 0.02; // Very sensitive to small rotations
+        
+        // Calculate where the piece "wants" to be based on board tilt
+        let targetWorldX = this.currentPiece.worldPosition.x;
+        let targetWorldZ = this.currentPiece.worldPosition.z;
+        
+        // Apply "gravity" forces that pull the piece toward the lower side
         if (Math.abs(this.boardRotation.y) > minRotation) {
-            forceX = Math.sin(this.boardRotation.y) * gravityStrength * deltaTime;
+            // Y rotation affects X movement (left/right sliding)
+            const slopeForce = Math.sin(this.boardRotation.y) * gravityStrength;
+            targetWorldX += slopeForce;
         }
         
-        // Apply accumulated forces
-        if (!this.currentPiece.velocity) {
-            this.currentPiece.velocity = { x: 0, z: 0 };
+        if (Math.abs(this.boardRotation.x) > minRotation) {
+            // X rotation affects Z movement (forward/backward sliding)
+            const slopeForce = Math.sin(this.boardRotation.x) * gravityStrength;
+            targetWorldZ += slopeForce;
         }
         
-        this.currentPiece.velocity.x += forceX;
-        this.currentPiece.velocity.z += forceZ;
+        // Update world position with some momentum
+        this.currentPiece.worldPosition.x = targetWorldX;
+        this.currentPiece.worldPosition.z = targetWorldZ;
         
-        // Apply friction to prevent infinite acceleration
-        const friction = 0.95;
-        this.currentPiece.velocity.x *= friction;
-        this.currentPiece.velocity.z *= friction;
+        // Convert world position to board grid position
+        const targetGridX = Math.round(this.currentPiece.worldPosition.x);
+        const targetGridZ = Math.round(this.currentPiece.worldPosition.z);
         
-        // Move piece based on accumulated velocity
-        const moveThreshold = 0.5; // How much velocity needed to actually move a block
+        // Calculate movement needed
+        const deltaX = targetGridX - this.currentPiece.position.x;
+        const deltaZ = targetGridZ - this.currentPiece.position.z;
         
-        if (Math.abs(this.currentPiece.velocity.x) > moveThreshold) {
-            const moveX = this.currentPiece.velocity.x > 0 ? 1 : -1;
+        // Apply movement if significant enough and valid
+        if (Math.abs(deltaX) >= 1) {
+            const moveX = deltaX > 0 ? 1 : -1;
             if (this.movePiece(this.currentPiece, moveX, 0, 0)) {
-                this.currentPiece.velocity.x = 0; // Reset velocity after successful move
+                // Successful move - adjust world position to match grid
+                this.currentPiece.worldPosition.x = this.currentPiece.position.x;
             }
         }
         
-        if (Math.abs(this.currentPiece.velocity.z) > moveThreshold) {
-            const moveZ = this.currentPiece.velocity.z > 0 ? 1 : -1;
+        if (Math.abs(deltaZ) >= 1) {
+            const moveZ = deltaZ > 0 ? 1 : -1;
             if (this.movePiece(this.currentPiece, 0, 0, moveZ)) {
-                this.currentPiece.velocity.z = 0; // Reset velocity after successful move
+                // Successful move - adjust world position to match grid
+                this.currentPiece.worldPosition.z = this.currentPiece.position.z;
             }
         }
     }
