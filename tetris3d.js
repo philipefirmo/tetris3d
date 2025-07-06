@@ -25,8 +25,7 @@ class Tetris3D {
         this.lastTouch = { x: 0, y: 0 };
         this.cameraDistance = 15;
         
-        // Board rotation for swipe controls
-        this.boardRotation = { x: 0, y: 0, z: 0 };
+        // Board remains fixed at position 0 - no rotation
         
         // Swipe detection
         this.swipeStart = { x: 0, y: 0 };
@@ -62,6 +61,9 @@ class Tetris3D {
                 color: 0xffa500
             }
         ];
+        
+        // Initialize board tilt for drag controls
+        this.boardTilt = { x: 0, z: 0 };
         
         this.init();
     }
@@ -128,19 +130,40 @@ class Tetris3D {
             }
         }
         
-        // Create board group
+        // Create board group and center it
         this.boardGroup = new THREE.Group();
+        // Center the board in the scene
+        this.boardGroup.position.set(
+            -(this.boardWidth - 1) / 2,
+            0,
+            -(this.boardDepth - 1) / 2
+        );
         this.scene.add(this.boardGroup);
         
         // Create board boundaries
         this.createBoardBoundaries();
     }
     
-    updateBoardRotation() {
-        if (this.boardGroup) {
-            this.boardGroup.rotation.x = this.boardRotation.x;
-            this.boardGroup.rotation.y = this.boardRotation.y;
-            this.boardGroup.rotation.z = this.boardRotation.z;
+    // Board rotation removed - board stays fixed at position 0
+    
+    resetBoardTilt() {
+        if (!this.boardTilt) return;
+        
+        // Gradually return board to level position
+        const resetSpeed = 0.1;
+        this.boardTilt.x *= (1 - resetSpeed);
+        this.boardTilt.z *= (1 - resetSpeed);
+        
+        // Apply the gradual reset
+        this.boardGroup.rotation.x = this.boardTilt.x;
+        this.boardGroup.rotation.z = this.boardTilt.z;
+        
+        // Stop when close enough to zero
+        if (Math.abs(this.boardTilt.x) < 0.01 && Math.abs(this.boardTilt.z) < 0.01) {
+            this.boardTilt.x = 0;
+            this.boardTilt.z = 0;
+            this.boardGroup.rotation.x = 0;
+            this.boardGroup.rotation.z = 0;
         }
     }
     
@@ -166,13 +189,11 @@ class Tetris3D {
         const absX = Math.abs(deltaX);
         const absY = Math.abs(deltaY);
         
-        // Get current camera and board orientation to determine visible face
-        const cameraAngleY = this.cameraRotation.y;
-        const boardAngleY = this.boardRotation.y;
-        const totalAngleY = cameraAngleY + boardAngleY;
+        // Get current camera orientation to determine visible face
+        const cameraAngleY = this.cameraAngle || 0;
         
         // Normalize angle to 0-2π range
-        const normalizedAngle = ((totalAngleY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+        const normalizedAngle = ((cameraAngleY % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
         
         let rotationAxis;
         
@@ -620,21 +641,36 @@ class Tetris3D {
             
             this.hasMoved = true;
             
-            // Move camera in circle around the board center if dragging
+            // Tilt board and move piece if dragging
             if (this.isDragging) {
-                // Rotate camera around the board center
-                const rotationSpeed = 0.01;
-                this.cameraAngle += deltaX * rotationSpeed;
+                // Tilt the board based on drag direction
+                const tiltSpeed = 0.02;
+                this.boardTilt = this.boardTilt || { x: 0, z: 0 };
                 
-                // Update camera position in circular motion
-                this.camera.position.set(
-                    Math.cos(this.cameraAngle) * this.cameraDistance,
-                    this.boardHeight/2 + 5,
-                    Math.sin(this.cameraAngle) * this.cameraDistance
-                );
+                this.boardTilt.z += deltaX * tiltSpeed; // Left/right tilt
+                this.boardTilt.x += deltaY * tiltSpeed; // Forward/back tilt
                 
-                // Keep camera looking at the center of the board
-                this.camera.lookAt(0, this.boardHeight/2, 0);
+                // Limit tilt angles
+                this.boardTilt.x = Math.max(-0.3, Math.min(0.3, this.boardTilt.x));
+                this.boardTilt.z = Math.max(-0.3, Math.min(0.3, this.boardTilt.z));
+                
+                // Apply tilt to board
+                this.boardGroup.rotation.x = this.boardTilt.x;
+                this.boardGroup.rotation.z = this.boardTilt.z;
+                
+                // Move current piece based on tilt
+                if (this.currentPiece) {
+                    const moveForce = 0.1;
+                    const moveX = Math.round(this.boardTilt.z * moveForce * 10);
+                    const moveZ = Math.round(this.boardTilt.x * moveForce * 10);
+                    
+                    if (moveX !== 0) {
+                        this.movePiece(this.currentPiece, moveX, 0, 0);
+                    }
+                    if (moveZ !== 0) {
+                        this.movePiece(this.currentPiece, 0, 0, moveZ);
+                    }
+                }
             }
             
             this.lastTouch = { x: touch.clientX, y: touch.clientY };
@@ -678,6 +714,9 @@ class Tetris3D {
             
             this.isDragging = false;
             this.hasMoved = false;
+            
+            // Gradually reset board tilt when not dragging
+            this.resetBoardTilt();
         });
         
         // Mouse controls for desktop
@@ -690,25 +729,45 @@ class Tetris3D {
             if (!this.isDragging) return;
             
             const deltaX = e.clientX - this.lastTouch.x;
+            const deltaY = e.clientY - this.lastTouch.y;
             
-            // Rotate camera around the board center
-            const rotationSpeed = 0.01;
-            this.cameraAngle += deltaX * rotationSpeed;
+            // Tilt the board based on mouse movement
+            const tiltSpeed = 0.02;
+            this.boardTilt = this.boardTilt || { x: 0, z: 0 };
             
-            // Update camera position in circular motion
-            this.camera.position.set(
-                Math.cos(this.cameraAngle) * this.cameraDistance,
-                this.boardHeight/2 + 5,
-                Math.sin(this.cameraAngle) * this.cameraDistance
-            );
+            this.boardTilt.z += deltaX * tiltSpeed; // Left/right tilt
+            this.boardTilt.x += deltaY * tiltSpeed; // Forward/back tilt
             
-            // Keep camera looking at the center of the board
-            this.camera.lookAt(0, this.boardHeight/2, 0);
+            // Limit tilt angles
+            this.boardTilt.x = Math.max(-0.3, Math.min(0.3, this.boardTilt.x));
+            this.boardTilt.z = Math.max(-0.3, Math.min(0.3, this.boardTilt.z));
+            
+            // Apply tilt to board
+            this.boardGroup.rotation.x = this.boardTilt.x;
+            this.boardGroup.rotation.z = this.boardTilt.z;
+            
+            // Move current piece based on tilt
+            if (this.currentPiece) {
+                const moveForce = 0.1;
+                const moveX = Math.round(this.boardTilt.z * moveForce * 10);
+                const moveZ = Math.round(this.boardTilt.x * moveForce * 10);
+                
+                if (moveX !== 0) {
+                    this.movePiece(this.currentPiece, moveX, 0, 0);
+                }
+                if (moveZ !== 0) {
+                    this.movePiece(this.currentPiece, 0, 0, moveZ);
+                }
+            }
+            
             this.lastTouch = { x: e.clientX, y: e.clientY };
         });
         
         canvas.addEventListener('mouseup', () => {
             this.isDragging = false;
+            
+            // Gradually reset board tilt when not dragging
+            this.resetBoardTilt();
         });
         
         // Button controls (simplified)
@@ -907,22 +966,9 @@ class Tetris3D {
     spawnNewPiece() {
         const pieceTypeIndex = Math.floor(Math.random() * this.pieceTypes.length);
         
-        // Spawn position varies based on board rotation
+        // Spawn position always at center of the board
         let spawnX = Math.floor(this.boardWidth / 2);
         let spawnZ = Math.floor(this.boardDepth / 2);
-        
-        // Adjust spawn position based on board tilt to create more interesting gameplay
-        if (Math.abs(this.boardRotation.y) > 0.2) {
-            // If board is tilted left/right, spawn pieces more towards the higher side
-            spawnX += this.boardRotation.y > 0 ? -2 : 2;
-            spawnX = Math.max(1, Math.min(this.boardWidth - 2, spawnX));
-        }
-        
-        if (Math.abs(this.boardRotation.x) > 0.2) {
-            // If board is tilted forward/back, spawn pieces more towards the higher side
-            spawnZ += this.boardRotation.x > 0 ? 2 : -2;
-            spawnZ = Math.max(1, Math.min(this.boardDepth - 2, spawnZ));
-        }
         
         this.currentPiece = this.createPiece(pieceTypeIndex);
         this.currentPiece.position.x = spawnX;
@@ -1004,18 +1050,7 @@ class Tetris3D {
         let targetWorldX = this.currentPiece.worldPosition.x;
         let targetWorldZ = this.currentPiece.worldPosition.z;
         
-        // Apply "gravity" forces that pull the piece toward the lower side
-        if (Math.abs(this.boardRotation.y) > minRotation) {
-            // Y rotation affects X movement (left/right sliding)
-            const slopeForce = Math.sin(this.boardRotation.y) * gravityStrength;
-            targetWorldX += slopeForce;
-        }
-        
-        if (Math.abs(this.boardRotation.x) > minRotation) {
-            // X rotation affects Z movement (forward/backward sliding)
-            const slopeForce = Math.sin(this.boardRotation.x) * gravityStrength;
-            targetWorldZ += slopeForce;
-        }
+        // No gravity forces - pieces only move through direct controls
         
         // Update world position with some momentum
         this.currentPiece.worldPosition.x = targetWorldX;
